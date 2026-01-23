@@ -75,9 +75,14 @@ export async function loadAccounts(): Promise<AccountsConfig | null> {
 }
 
 export async function saveAccounts(config: AccountsConfig): Promise<void> {
-  const configPath = await findConfigPath();
+  let configPath = await findConfigPath();
   if (!configPath) {
-    throw new Error("No accounts config file found");
+    const defaultPath = CONFIG_PATHS[0];
+    if (defaultPath) {
+      configPath = defaultPath;
+    } else {
+      throw new Error("No accounts config file found");
+    }
   }
 
   await fs.mkdir(dirname(configPath), { recursive: true });
