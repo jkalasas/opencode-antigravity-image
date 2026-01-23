@@ -14,14 +14,43 @@ export async function findConfigPath(): Promise<string | null> {
 }
 
 export async function loadAccounts(): Promise<AccountsConfig | null> {
+  const envToken = process.env.ANTIGRAVITY_REFRESH_TOKEN;
+  
   const configPath = await findConfigPath();
   if (!configPath) {
+    if (envToken) {
+       return {
+        version: 1,
+        activeIndex: 0,
+        accounts: [{
+          refreshToken: envToken,
+          email: "env-user@ci",
+          lastUsed: 0,
+          rateLimitResetTimes: {}
+        }]
+      };
+    }
     return null;
   }
 
   try {
     const content = await fs.readFile(configPath, "utf-8");
     const data = JSON.parse(content) as AccountsConfig;
+    
+    if (envToken) {
+      if (!Array.isArray(data.accounts)) {
+        data.accounts = [];
+      }
+      const hasEnvToken = data.accounts.some(a => a.refreshToken === envToken);
+      if (!hasEnvToken) {
+        data.accounts.push({
+          refreshToken: envToken,
+          email: "env-user@ci",
+          lastUsed: 0,
+          rateLimitResetTimes: {}
+        });
+      }
+    }
 
     if (!Array.isArray(data.accounts)) {
       return null;
@@ -29,6 +58,18 @@ export async function loadAccounts(): Promise<AccountsConfig | null> {
 
     return data;
   } catch {
+    if (envToken) {
+      return {
+        version: 1,
+        activeIndex: 0,
+        accounts: [{
+          refreshToken: envToken,
+          email: "env-user@ci",
+          lastUsed: 0,
+          rateLimitResetTimes: {}
+        }]
+      };
+    }
     return null;
   }
 }
