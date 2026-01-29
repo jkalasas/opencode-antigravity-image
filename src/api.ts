@@ -27,8 +27,9 @@ import type {
   CachedImageQuota,
   QuotaApiResponse,
 } from "./types";
+import { fetchWithProxy } from "./proxy";
 
-export async function refreshAccessToken(refreshToken: string): Promise<string> {
+export async function refreshAccessToken(refreshToken: string, proxyUrl?: string): Promise<string> {
   const params = new URLSearchParams({
     client_id: ANTIGRAVITY_CLIENT_ID,
     client_secret: ANTIGRAVITY_CLIENT_SECRET,
@@ -36,11 +37,11 @@ export async function refreshAccessToken(refreshToken: string): Promise<string> 
     grant_type: "refresh_token",
   });
 
-  const response = await fetch(GOOGLE_TOKEN_URL, {
+  const response = await fetchWithProxy(GOOGLE_TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: params.toString(),
-  });
+  }, proxyUrl);
 
   if (!response.ok) {
     const text = await response.text();
@@ -116,6 +117,7 @@ export interface GenerateImageOptions {
   aspectRatio?: AspectRatio;
   imageSize?: ImageSize;
   count?: number;
+  proxyUrl?: string;
 }
 
 export async function generateImages(
@@ -124,7 +126,7 @@ export async function generateImages(
   contents: Content[],
   options: GenerateImageOptions = {}
 ): Promise<GenerateContentResponse> {
-  const { aspectRatio = DEFAULT_ASPECT_RATIO, imageSize = DEFAULT_IMAGE_SIZE, count = 1 } = options;
+  const { aspectRatio = DEFAULT_ASPECT_RATIO, imageSize = DEFAULT_IMAGE_SIZE, count = 1, proxyUrl } = options;
 
   const url = `${ANTIGRAVITY_ENDPOINT}/v1internal:generateContent`;
 
@@ -160,7 +162,7 @@ export async function generateImages(
     requestId: `agent-${crypto.randomUUID()}`,
   };
 
-  const response = await fetch(url, {
+  const response = await fetchWithProxy(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -170,7 +172,7 @@ export async function generateImages(
       "Client-Metadata": '{"ideType":"IDE_UNSPECIFIED","platform":"PLATFORM_UNSPECIFIED","pluginType":"GEMINI"}',
     },
     body: JSON.stringify(wrappedBody),
-  });
+  }, proxyUrl);
 
   if (response.status === 429) {
     const retryAfter = response.headers.get("Retry-After");
