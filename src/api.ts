@@ -8,6 +8,9 @@ import {
   ANTIGRAVITY_ENDPOINT,
   DEFAULT_ASPECT_RATIO,
   DEFAULT_IMAGE_SIZE,
+  QUOTA_API_URL,
+  QUOTA_USER_AGENT,
+  DEFAULT_MODEL,
   type AspectRatio,
   type ImageSize,
   type SupportedModel,
@@ -21,6 +24,8 @@ import type {
   GenerateContentRequest,
   GenerateContentResponse,
   CandidatePart,
+  CachedImageQuota,
+  QuotaApiResponse,
 } from "./types";
 
 export async function refreshAccessToken(refreshToken: string): Promise<string> {
@@ -320,4 +325,43 @@ export function buildModelResponseContent(response: GenerateContentResponse): Co
     role: "model",
     parts,
   };
+}
+
+export async function fetchImageModelQuota(
+  accessToken: string
+): Promise<CachedImageQuota | null> {
+  try {
+    const response = await fetch(QUOTA_API_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "User-Agent": QUOTA_USER_AGENT,
+      },
+      body: JSON.stringify({}),
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = (await response.json()) as QuotaApiResponse;
+    const imageModel = data.models?.[DEFAULT_MODEL];
+
+    if (!imageModel?.quotaInfo) {
+      return null;
+    }
+
+    if (imageModel.quotaInfo.remainingFraction === undefined || imageModel.quotaInfo.remainingFraction === null) {
+      return null;
+    }
+
+    return {
+      remainingFraction: imageModel.quotaInfo.remainingFraction,
+      resetTime: imageModel.quotaInfo.resetTime,
+      updatedAt: Date.now(),
+    };
+  } catch {
+    return null;
+  }
 }

@@ -10,6 +10,7 @@ import {
   DEFAULT_ASPECT_RATIO,
   DEFAULT_IMAGE_SIZE,
   CONFIG_PATHS,
+  QUOTA_CACHE_TTL_MS,
 } from "./constants";
 import type { AspectRatio, ImageSize, SupportedModel } from "./constants";
 import type { GenerateImageInput, Content, InlineDataPart, TextPart } from "./types";
@@ -20,6 +21,7 @@ import {
   markAccountUsed,
   getNextAvailableResetTime,
   formatDuration,
+  updateAccountQuota,
 } from "./accounts";
 import {
   refreshAccessToken,
@@ -30,6 +32,7 @@ import {
   isRateLimitError,
   isCapacityError,
   buildModelResponseContent,
+  fetchImageModelQuota,
 } from "./api";
 import {
   loadSession,
@@ -263,6 +266,20 @@ ${message}`;
             }
 
             await markAccountUsed(config, usedAccount);
+
+            const cachedQuota = account.cachedImageQuota;
+            const quotaIsStale = !cachedQuota || (Date.now() - cachedQuota.updatedAt > QUOTA_CACHE_TTL_MS);
+            if (quotaIsStale) {
+              const quota = await fetchImageModelQuota(accessToken);
+              if (quota) {
+                await updateAccountQuota(
+                  config,
+                  account,
+                  quota.remainingFraction,
+                  quota.resetTime
+                );
+              }
+            }
 
             let images;
             try {

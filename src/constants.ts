@@ -62,6 +62,16 @@ export const SESSIONS_SUBDIR = ".opencode/generated-image-sessions";
 // Rate limit key for tracking in accounts file
 export const RATE_LIMIT_KEY_PREFIX = "gemini-antigravity";
 
+// Quota API configuration
+export const QUOTA_API_URL = "https://daily-cloudcode-pa.sandbox.googleapis.com/v1internal:fetchAvailableModels";
+export const QUOTA_USER_AGENT = "antigravity/1.11.3 Darwin/arm64";
+
+// Soft quota threshold - skip accounts over 90% usage (remainingFraction < 0.1)
+export const SOFT_QUOTA_THRESHOLD = 0.1;
+
+// Quota cache TTL in milliseconds (5 minutes)
+export const QUOTA_CACHE_TTL_MS = 5 * 60 * 1000;
+
 // Command file for OpenCode discovery
 const commandBase = path.join(os.homedir(), ".config", "opencode");
 export const COMMAND_DIR = path.join(commandBase, "command");
