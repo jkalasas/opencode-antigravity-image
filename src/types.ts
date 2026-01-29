@@ -1,4 +1,4 @@
-import type { AspectRatio, SupportedModel } from "./constants";
+import type { AspectRatio, ImageSize, SupportedModel } from "./constants";
 
 export interface RateLimitResetTimes {
   [key: string]: number;
@@ -51,6 +51,7 @@ export interface Content {
 
 export interface ImageConfig {
   aspectRatio?: AspectRatio;
+  imageSize?: ImageSize;
   numberOfImages?: number;
 }
 
@@ -122,6 +123,7 @@ export interface Session {
 export interface GenerateImageInput {
   prompt: string;
   aspect_ratio?: AspectRatio;
+  image_size?: ImageSize;
   output_path?: string;
   model?: SupportedModel;
   input_image?: string;
