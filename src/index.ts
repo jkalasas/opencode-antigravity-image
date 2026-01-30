@@ -186,7 +186,8 @@ ${message}`;
             const contents = buildContents(prompt, inputImagePart, sessionHistory);
 
             let response;
-            let usedAccount = account;
+            let effectiveAccount = account;
+            let effectiveToken = accessToken;
             try {
               response = await generateImages(accessToken, model as SupportedModel, contents, {
                 aspectRatio: aspectRatio as AspectRatio,
@@ -206,7 +207,8 @@ ${message}`;
                       imageSize: imageSize as ImageSize,
                       count,
                     });
-                    usedAccount = nextAccount;
+                    effectiveAccount = nextAccount;
+                    effectiveToken = newToken;
                   } catch (retryError) {
                     const message = retryError instanceof Error ? retryError.message : String(retryError);
                     return `❌ **Rate limit hit, retry failed**
@@ -232,7 +234,8 @@ All accounts are currently rate-limited.`;
                       aspectRatio: aspectRatio as AspectRatio,
                       count,
                     });
-                    usedAccount = nextAccount;
+                    effectiveAccount = nextAccount;
+                    effectiveToken = newToken;
                   } catch (retryError) {
                     if (isCapacityError(retryError)) {
                       const wait = formatDuration(retryError.retryAfterMs);
@@ -265,16 +268,16 @@ ${message}`;
               return "❌ **No response received from API**";
             }
 
-            await markAccountUsed(config, usedAccount);
+            await markAccountUsed(config, effectiveAccount);
 
-            const cachedQuota = account.cachedImageQuota;
+            const cachedQuota = effectiveAccount.cachedImageQuota;
             const quotaIsStale = !cachedQuota || (Date.now() - cachedQuota.updatedAt > QUOTA_CACHE_TTL_MS);
             if (quotaIsStale) {
-              const quota = await fetchImageModelQuota(accessToken);
+              const quota = await fetchImageModelQuota(effectiveToken);
               if (quota) {
                 await updateAccountQuota(
                   config,
-                  account,
+                  effectiveAccount,
                   quota.remainingFraction,
                   quota.resetTime
                 );
@@ -318,8 +321,8 @@ ${message}`;
 
             output += `\n\n**Model:** ${model} | **Aspect Ratio:** ${aspectRatio} | **Size:** ${imageSize}`;
 
-            if (usedAccount.email) {
-              output += ` | **Account:** ${usedAccount.email.split("@")[0]}...`;
+            if (effectiveAccount.email) {
+              output += ` | **Account:** ${effectiveAccount.email.split("@")[0]}...`;
             }
 
             return output;
