@@ -3,6 +3,7 @@ import { existsSync } from "fs";
 import { dirname } from "path";
 import { CONFIG_PATHS, RATE_LIMIT_KEY_PREFIX, SOFT_QUOTA_THRESHOLD, QUOTA_CACHE_TTL_MS } from "./constants";
 import type { Account, AccountsConfig } from "./types";
+import { validateProxyUrl } from "./proxy";
 
 export async function findConfigPath(): Promise<string | null> {
   for (const configPath of CONFIG_PATHS) {
@@ -11,6 +12,14 @@ export async function findConfigPath(): Promise<string | null> {
     }
   }
   return null;
+}
+
+function validateAccountProxyUrls(accounts: Account[]): void {
+  for (const account of accounts) {
+    if (account.proxyUrl) {
+      validateProxyUrl(account.proxyUrl);
+    }
+  }
 }
 
 export async function loadAccounts(): Promise<AccountsConfig | null> {
@@ -55,6 +64,8 @@ export async function loadAccounts(): Promise<AccountsConfig | null> {
     if (!Array.isArray(data.accounts)) {
       return null;
     }
+
+    validateAccountProxyUrls(data.accounts);
 
     return data;
   } catch {

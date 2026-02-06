@@ -155,7 +155,7 @@ Try again later or add more accounts to opencode-antigravity-auth.`;
 
             let accessToken: string;
             try {
-              accessToken = await refreshAccessToken(account.refreshToken);
+              accessToken = await refreshAccessToken(account.refreshToken, account.proxyUrl);
             } catch (error) {
               const message = error instanceof Error ? error.message : String(error);
               return `❌ **Token refresh failed**
@@ -193,6 +193,7 @@ ${message}`;
                 aspectRatio: aspectRatio as AspectRatio,
                 imageSize: imageSize as ImageSize,
                 count,
+                proxyUrl: account.proxyUrl,
               });
             } catch (error) {
               if (isRateLimitError(error)) {
@@ -201,11 +202,12 @@ ${message}`;
                 const nextAccount = selectAccount(config, model, [account.refreshToken]);
                 if (nextAccount) {
                   try {
-                    const newToken = await refreshAccessToken(nextAccount.refreshToken);
+                    const newToken = await refreshAccessToken(nextAccount.refreshToken, nextAccount.proxyUrl);
                     response = await generateImages(newToken, model as SupportedModel, contents, {
                       aspectRatio: aspectRatio as AspectRatio,
                       imageSize: imageSize as ImageSize,
                       count,
+                      proxyUrl: nextAccount.proxyUrl,
                     });
                     effectiveAccount = nextAccount;
                     effectiveToken = newToken;

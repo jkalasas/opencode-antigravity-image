@@ -15,6 +15,7 @@ export interface Account {
   refreshToken: string;
   projectId?: string;
   managedProjectId?: string;
+  proxyUrl?: string;
   addedAt?: number;
   lastUsed?: number;
   rateLimitResetTimes?: RateLimitResetTimes;
