@@ -1,8 +1,76 @@
 import * as fs from "fs/promises";
 import { existsSync } from "fs";
 import { dirname } from "path";
-import { CONFIG_PATHS, RATE_LIMIT_KEY_PREFIX } from "./constants";
+import { CONFIG_PATHS, IMAGE_CONFIG_PATHS, RATE_LIMIT_KEY_PREFIX } from "./constants";
 import type { Account, AccountsConfig } from "./types";
+
+type ImageConfig = {
+  /** If set, only these account emails will be used for image generation. */
+  allowedEmails?: string[];
+};
+
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase();
+}
+
+function parseAllowedEmailsFromEnv(): Set<string> | null {
+  const raw = process.env.OPENCODE_ANTIGRAVITY_IMAGE_ALLOWED_EMAILS;
+  if (!raw) return null;
+
+  const emails = raw
+    .split(",")
+    .map((e) => normalizeEmail(e))
+    .filter(Boolean);
+
+  return emails.length > 0 ? new Set(emails) : null;
+}
+
+async function loadImageConfigFromDisk(): Promise<ImageConfig | null> {
+  for (const configPath of IMAGE_CONFIG_PATHS) {
+    if (!existsSync(configPath)) continue;
+
+    try {
+      const content = await fs.readFile(configPath, "utf-8");
+      const parsed = JSON.parse(content) as ImageConfig;
+      return parsed && typeof parsed === "object" ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+export async function getAllowedImageAccountEmails(): Promise<Set<string> | null> {
+  const env = parseAllowedEmailsFromEnv();
+  if (env) return env;
+
+  const cfg = await loadImageConfigFromDisk();
+  const emails = Array.isArray(cfg?.allowedEmails) ? cfg?.allowedEmails : null;
+  if (!emails) return null;
+
+  const normalized = emails
+    .map((e) => normalizeEmail(String(e)))
+    .filter(Boolean);
+
+  return normalized.length > 0 ? new Set(normalized) : null;
+}
+
+export function filterAccountsByEmailAllowlist(
+  config: AccountsConfig,
+  allowedEmails: Set<string>
+): AccountsConfig {
+  const filtered = config.accounts.filter((a) => {
+    if (!a?.refreshToken) return false;
+    if (!a.email) return false;
+    return allowedEmails.has(normalizeEmail(a.email));
+  });
+
+  return {
+    ...config,
+    accounts: filtered,
+  };
+}
 
 export async function findConfigPath(): Promise<string | null> {
   for (const configPath of CONFIG_PATHS) {
