@@ -4,6 +4,12 @@ export interface RateLimitResetTimes {
   [key: string]: number;
 }
 
+export interface CachedImageQuota {
+  remainingFraction: number;
+  resetTime?: string;
+  updatedAt: number;
+}
+
 export interface Account {
   email?: string;
   refreshToken: string;
@@ -12,9 +18,10 @@ export interface Account {
   addedAt?: number;
   lastUsed?: number;
   rateLimitResetTimes?: RateLimitResetTimes;
-  lastSwitchReason?: "rate-limit" | "initial" | "rotation";
+  lastSwitchReason?: "rate-limit" | "initial" | "rotation" | "soft-quota";
   coolingDownUntil?: number;
   cooldownReason?: "auth-failure" | "network-error" | "project-error";
+  cachedImageQuota?: CachedImageQuota;
 }
 
 export interface AccountsConfig {
@@ -143,4 +150,17 @@ export interface GenerateImageResult {
   images?: GeneratedImage[];
   error?: string;
   sessionId?: string;
+}
+
+export interface QuotaInfo {
+  remainingFraction?: number;
+  resetTime?: string;
+}
+
+export interface ModelInfo {
+  quotaInfo?: QuotaInfo;
+}
+
+export interface QuotaApiResponse {
+  models: Record<string, ModelInfo>;
 }
