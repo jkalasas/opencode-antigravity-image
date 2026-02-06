@@ -48,6 +48,11 @@ export const VALID_ASPECT_RATIOS = [
 export type AspectRatio = typeof VALID_ASPECT_RATIOS[number];
 export const DEFAULT_ASPECT_RATIO: AspectRatio = "1:1";
 
+// Valid image sizes for image generation
+export const VALID_IMAGE_SIZES = ["1K", "2K", "4K"] as const;
+export type ImageSize = typeof VALID_IMAGE_SIZES[number];
+export const DEFAULT_IMAGE_SIZE: ImageSize = "1K";
+
 // Default output directory (relative to project root)
 export const DEFAULT_OUTPUT_DIR = ".opencode/generated-images";
 

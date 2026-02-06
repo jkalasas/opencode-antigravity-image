@@ -5,11 +5,13 @@ import {
   COMMAND_FILE,
   COMMAND_CONTENT,
   VALID_ASPECT_RATIOS,
+  VALID_IMAGE_SIZES,
   DEFAULT_MODEL,
   DEFAULT_ASPECT_RATIO,
+  DEFAULT_IMAGE_SIZE,
   CONFIG_PATHS,
 } from "./constants";
-import type { AspectRatio, SupportedModel } from "./constants";
+import type { AspectRatio, ImageSize, SupportedModel } from "./constants";
 import type { GenerateImageInput, Content, InlineDataPart, TextPart } from "./types";
 import {
   loadAccounts,
@@ -78,6 +80,10 @@ Uses credentials from opencode-antigravity-auth.`,
             .enum(VALID_ASPECT_RATIOS as unknown as [string, ...string[]])
             .optional()
             .describe(`Aspect ratio: ${VALID_ASPECT_RATIOS.join(", ")}. Default: 1:1`),
+          image_size: z
+            .enum(VALID_IMAGE_SIZES as unknown as [string, ...string[]])
+            .optional()
+            .describe(`Image resolution: ${VALID_IMAGE_SIZES.join(", ")}. Default: 1K`),
           output_path: z
             .string()
             .optional()
@@ -105,6 +111,7 @@ Uses credentials from opencode-antigravity-auth.`,
           const {
             prompt,
             aspect_ratio: aspectRatio = DEFAULT_ASPECT_RATIO,
+            image_size: imageSize = DEFAULT_IMAGE_SIZE,
             output_path: outputPath,
             input_image: inputImage,
             count = 1,
@@ -178,6 +185,7 @@ ${message}`;
             try {
               response = await generateImages(accessToken, model as SupportedModel, contents, {
                 aspectRatio: aspectRatio as AspectRatio,
+                imageSize: imageSize as ImageSize,
                 count,
               });
             } catch (error) {
@@ -190,6 +198,7 @@ ${message}`;
                     const newToken = await refreshAccessToken(nextAccount.refreshToken);
                     response = await generateImages(newToken, model as SupportedModel, contents, {
                       aspectRatio: aspectRatio as AspectRatio,
+                      imageSize: imageSize as ImageSize,
                       count,
                     });
                     await markAccountUsed(config, nextAccount);
@@ -258,7 +267,7 @@ ${message}`;
               output += `\n\n**Session:** \`${sessionId}\` (use same ID for consistent characters)`;
             }
 
-            output += `\n\n**Model:** ${model} | **Aspect Ratio:** ${aspectRatio}`;
+            output += `\n\n**Model:** ${model} | **Aspect Ratio:** ${aspectRatio} | **Size:** ${imageSize}`;
 
             if (account.email) {
               output += ` | **Account:** ${account.email.split("@")[0]}...`;

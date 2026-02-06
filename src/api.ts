@@ -7,7 +7,9 @@ import {
   GOOGLE_TOKEN_URL,
   ANTIGRAVITY_ENDPOINT,
   DEFAULT_ASPECT_RATIO,
+  DEFAULT_IMAGE_SIZE,
   type AspectRatio,
+  type ImageSize,
   type SupportedModel,
 } from "./constants";
 import type {
@@ -107,6 +109,7 @@ export function buildContents(
 
 export interface GenerateImageOptions {
   aspectRatio?: AspectRatio;
+  imageSize?: ImageSize;
   count?: number;
 }
 
@@ -116,9 +119,8 @@ export async function generateImages(
   contents: Content[],
   options: GenerateImageOptions = {}
 ): Promise<GenerateContentResponse> {
-  const { aspectRatio = DEFAULT_ASPECT_RATIO, count = 1 } = options;
+  const { aspectRatio = DEFAULT_ASPECT_RATIO, imageSize = DEFAULT_IMAGE_SIZE, count = 1 } = options;
 
-  // Antigravity uses /v1internal:generateContent (no model in URL)
   const url = `${ANTIGRAVITY_ENDPOINT}/v1internal:generateContent`;
 
   const innerRequest: GenerateContentRequest = {
@@ -127,6 +129,7 @@ export async function generateImages(
       responseModalities: ["IMAGE"],
       imageConfig: {
         aspectRatio,
+        imageSize,
       },
       candidateCount: count,
     },
