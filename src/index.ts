@@ -28,6 +28,7 @@ import {
   generateImages,
   extractImages,
   isRateLimitError,
+  isCapacityError,
   buildModelResponseContent,
 } from "./api";
 import {
@@ -182,6 +183,7 @@ ${message}`;
             const contents = buildContents(prompt, inputImagePart, sessionHistory);
 
             let response;
+            let usedAccount = account;
             try {
               response = await generateImages(accessToken, model as SupportedModel, contents, {
                 aspectRatio: aspectRatio as AspectRatio,
@@ -192,8 +194,8 @@ ${message}`;
               if (isRateLimitError(error)) {
                 await markRateLimited(config, account, model, error.retryAfterMs);
 
-                const nextAccount = selectAccount(config, model);
-                if (nextAccount && nextAccount.refreshToken !== account.refreshToken) {
+                const nextAccount = selectAccount(config, model, [account.refreshToken]);
+                if (nextAccount) {
                   try {
                     const newToken = await refreshAccessToken(nextAccount.refreshToken);
                     response = await generateImages(newToken, model as SupportedModel, contents, {
@@ -201,7 +203,7 @@ ${message}`;
                       imageSize: imageSize as ImageSize,
                       count,
                     });
-                    await markAccountUsed(config, nextAccount);
+                    usedAccount = nextAccount;
                   } catch (retryError) {
                     const message = retryError instanceof Error ? retryError.message : String(retryError);
                     return `❌ **Rate limit hit, retry failed**
@@ -218,6 +220,36 @@ Retry after: ${wait}
 
 All accounts are currently rate-limited.`;
                 }
+              } else if (isCapacityError(error)) {
+                const nextAccount = selectAccount(config, model, [account.refreshToken]);
+                if (nextAccount) {
+                  try {
+                    const newToken = await refreshAccessToken(nextAccount.refreshToken);
+                    response = await generateImages(newToken, model as SupportedModel, contents, {
+                      aspectRatio: aspectRatio as AspectRatio,
+                      count,
+                    });
+                    usedAccount = nextAccount;
+                  } catch (retryError) {
+                    if (isCapacityError(retryError)) {
+                      const wait = formatDuration(retryError.retryAfterMs);
+                      return `❌ **Model capacity exhausted**
+
+All accounts hitting capacity limits. Retry after: ${wait}`;
+                    }
+                    const message = retryError instanceof Error ? retryError.message : String(retryError);
+                    return `❌ **Capacity error, retry failed**
+
+${message}`;
+                  }
+                } else {
+                  const wait = formatDuration(error.retryAfterMs);
+                  return `❌ **Model capacity exhausted**
+
+Retry after: ${wait}
+
+Try again shortly - this is a temporary server-side issue.`;
+                }
               } else {
                 const message = error instanceof Error ? error.message : String(error);
                 return `❌ **Image generation failed**
@@ -230,7 +262,7 @@ ${message}`;
               return "❌ **No response received from API**";
             }
 
-            await markAccountUsed(config, account);
+            await markAccountUsed(config, usedAccount);
 
             let images;
             try {
@@ -269,8 +301,8 @@ ${message}`;
 
             output += `\n\n**Model:** ${model} | **Aspect Ratio:** ${aspectRatio} | **Size:** ${imageSize}`;
 
-            if (account.email) {
-              output += ` | **Account:** ${account.email.split("@")[0]}...`;
+            if (usedAccount.email) {
+              output += ` | **Account:** ${usedAccount.email.split("@")[0]}...`;
             }
 
             return output;

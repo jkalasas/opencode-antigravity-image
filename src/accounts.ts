@@ -106,14 +106,15 @@ function getRateLimitResetTime(account: Account, model: string): number {
 
 export function selectAccount(
   config: AccountsConfig,
-  model: string
+  model: string,
+  excludeTokens: string[] = []
 ): Account | null {
-  const now = Date.now();
   const availableAccounts: Array<{ account: Account; index: number }> = [];
 
   for (let i = 0; i < config.accounts.length; i++) {
     const account = config.accounts[i];
     if (!account?.refreshToken) continue;
+    if (excludeTokens.includes(account.refreshToken)) continue;
 
     if (!isRateLimited(account, model)) {
       availableAccounts.push({ account, index: i });
@@ -126,6 +127,7 @@ export function selectAccount(
 
     for (const account of config.accounts) {
       if (!account?.refreshToken) continue;
+      if (excludeTokens.includes(account.refreshToken)) continue;
       const resetTime = getRateLimitResetTime(account, model);
       if (resetTime < earliestReset) {
         earliestReset = resetTime;

@@ -176,6 +176,44 @@ export async function generateImages(
     throw error;
   }
 
+  if (response.status === 503) {
+    const text = await response.text();
+    let retryMs = 60 * 1000;
+    let isCapacityExhausted = false;
+    
+    try {
+      const errorData = JSON.parse(text);
+      const errorInfo = errorData?.error?.details?.find(
+        (d: { "@type"?: string; reason?: string }) => 
+          d["@type"]?.includes("ErrorInfo") && d.reason === "MODEL_CAPACITY_EXHAUSTED"
+      );
+      isCapacityExhausted = !!errorInfo;
+      
+      if (isCapacityExhausted) {
+        const retryInfo = errorData?.error?.details?.find(
+          (d: { "@type"?: string }) => d["@type"]?.includes("RetryInfo")
+        );
+        if (retryInfo?.retryDelay) {
+          const match = retryInfo.retryDelay.match(/^(\d+(?:\.\d+)?)s$/);
+          if (match) {
+            retryMs = Math.ceil(parseFloat(match[1]) * 1000);
+          }
+        }
+      }
+    } catch {
+      // Parse failed, treat as generic 503
+    }
+    
+    if (isCapacityExhausted) {
+      const error = new Error(`Model capacity exhausted. Retry after ${Math.ceil(retryMs / 1000)} seconds.`);
+      (error as CapacityError).isCapacityError = true;
+      (error as CapacityError).retryAfterMs = retryMs;
+      throw error;
+    }
+    
+    throw new Error(`API request failed (503): ${text}`);
+  }
+
   if (!response.ok) {
     const text = await response.text();
     throw new Error(`API request failed (${response.status}): ${text}`);
@@ -200,6 +238,19 @@ export function isRateLimitError(error: unknown): error is RateLimitError {
     error instanceof Error &&
     "isRateLimit" in error &&
     (error as RateLimitError).isRateLimit === true
+  );
+}
+
+export interface CapacityError extends Error {
+  isCapacityError: boolean;
+  retryAfterMs: number;
+}
+
+export function isCapacityError(error: unknown): error is CapacityError {
+  return (
+    error instanceof Error &&
+    "isCapacityError" in error &&
+    (error as CapacityError).isCapacityError === true
   );
 }
 
