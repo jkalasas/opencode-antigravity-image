@@ -1,7 +1,13 @@
-import type { AspectRatio, SupportedModel } from "./constants";
+import type { AspectRatio, ImageSize, SupportedModel } from "./constants";
 
 export interface RateLimitResetTimes {
   [key: string]: number;
+}
+
+export interface CachedImageQuota {
+  remainingFraction: number;
+  resetTime?: string;
+  updatedAt: number;
 }
 
 export interface Account {
@@ -9,12 +15,14 @@ export interface Account {
   refreshToken: string;
   projectId?: string;
   managedProjectId?: string;
+  proxyUrl?: string;
   addedAt?: number;
   lastUsed?: number;
   rateLimitResetTimes?: RateLimitResetTimes;
-  lastSwitchReason?: "rate-limit" | "initial" | "rotation";
+  lastSwitchReason?: "rate-limit" | "initial" | "rotation" | "soft-quota";
   coolingDownUntil?: number;
   cooldownReason?: "auth-failure" | "network-error" | "project-error";
+  cachedImageQuota?: CachedImageQuota;
 }
 
 export interface AccountsConfig {
@@ -51,6 +59,7 @@ export interface Content {
 
 export interface ImageConfig {
   aspectRatio?: AspectRatio;
+  imageSize?: ImageSize;
   numberOfImages?: number;
 }
 
@@ -122,6 +131,7 @@ export interface Session {
 export interface GenerateImageInput {
   prompt: string;
   aspect_ratio?: AspectRatio;
+  image_size?: ImageSize;
   output_path?: string;
   model?: SupportedModel;
   input_image?: string;
@@ -141,4 +151,17 @@ export interface GenerateImageResult {
   images?: GeneratedImage[];
   error?: string;
   sessionId?: string;
+}
+
+export interface QuotaInfo {
+  remainingFraction?: number;
+  resetTime?: string;
+}
+
+export interface ModelInfo {
+  quotaInfo?: QuotaInfo;
+}
+
+export interface QuotaApiResponse {
+  models: Record<string, ModelInfo>;
 }

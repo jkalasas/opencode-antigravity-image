@@ -1,6 +1,6 @@
 {
   "name": "opencode-antigravity-image",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "OpenCode plugin for image generation using Gemini 2.5 Flash Image and Gemini 3 Pro Image models",
   "main": "src/index.ts",
   "type": "module",
@@ -22,12 +22,13 @@
     "url": "https://github.com/jkalasas/opencode-antigravity-image"
   },
   "dependencies": {
-    "@opencode-ai/plugin": "^1.1.31",
-    "opencode-antigravity-auth": "^1.3.0"
+    "@opencode-ai/plugin": "^1.1.53",
+    "opencode-antigravity-auth": "^1.4.6",
+    "undici": "^7.21.0"
   },
   "devDependencies": {
     "@types/bun": "latest",
-    "@types/node": "^25.0.8",
+    "@types/node": "^25.2.2",
     "typescript": "^5"
   }
 }

@@ -1,8 +1,15 @@
 import * as fs from "fs/promises";
 import { existsSync } from "fs";
 import { dirname } from "path";
-import { CONFIG_PATHS, IMAGE_CONFIG_PATHS, RATE_LIMIT_KEY_PREFIX } from "./constants";
+import {
+  CONFIG_PATHS,
+  IMAGE_CONFIG_PATHS,
+  RATE_LIMIT_KEY_PREFIX,
+  SOFT_QUOTA_THRESHOLD,
+  QUOTA_CACHE_TTL_MS,
+} from "./constants";
 import type { Account, AccountsConfig } from "./types";
+import { validateProxyUrl } from "./proxy";
 
 type ImageConfig = {
   /** If set, only these account emails will be used for image generation. */
@@ -81,6 +88,14 @@ export async function findConfigPath(): Promise<string | null> {
   return null;
 }
 
+function validateAccountProxyUrls(accounts: Account[]): void {
+  for (const account of accounts) {
+    if (account.proxyUrl) {
+      validateProxyUrl(account.proxyUrl);
+    }
+  }
+}
+
 export async function loadAccounts(): Promise<AccountsConfig | null> {
   const envToken = process.env.ANTIGRAVITY_REFRESH_TOKEN;
   
@@ -123,6 +138,8 @@ export async function loadAccounts(): Promise<AccountsConfig | null> {
     if (!Array.isArray(data.accounts)) {
       return null;
     }
+
+    validateAccountProxyUrls(data.accounts);
 
     return data;
   } catch {
@@ -172,19 +189,48 @@ function getRateLimitResetTime(account: Account, model: string): number {
   return account.rateLimitResetTimes?.[key] ?? 0;
 }
 
+function isSoftQuotaExceeded(account: Account): boolean {
+  const quota = account.cachedImageQuota;
+  if (!quota) return false;
+
+  const cacheAge = Date.now() - quota.updatedAt;
+  if (cacheAge > QUOTA_CACHE_TTL_MS) return false;
+
+  return quota.remainingFraction <= SOFT_QUOTA_THRESHOLD;
+}
+
 export function selectAccount(
   config: AccountsConfig,
-  model: string
+  model: string,
+  excludeTokens: string[] = []
 ): Account | null {
-  const now = Date.now();
   const availableAccounts: Array<{ account: Account; index: number }> = [];
+  const softQuotaExceededAccounts: Array<{ account: Account; index: number }> = [];
 
   for (let i = 0; i < config.accounts.length; i++) {
     const account = config.accounts[i];
     if (!account?.refreshToken) continue;
+    if (excludeTokens.includes(account.refreshToken)) continue;
 
-    if (!isRateLimited(account, model)) {
+    if (isRateLimited(account, model)) continue;
+
+    if (isSoftQuotaExceeded(account)) {
+      softQuotaExceededAccounts.push({ account, index: i });
+    } else {
       availableAccounts.push({ account, index: i });
+    }
+  }
+
+  if (availableAccounts.length === 0 && softQuotaExceededAccounts.length > 0) {
+    softQuotaExceededAccounts.sort((a, b) => {
+      const aQuota = a.account.cachedImageQuota?.remainingFraction ?? 0;
+      const bQuota = b.account.cachedImageQuota?.remainingFraction ?? 0;
+      return bQuota - aQuota;
+    });
+    const best = softQuotaExceededAccounts[0];
+    if (best) {
+      best.account.lastSwitchReason = "soft-quota";
+      return best.account;
     }
   }
 
@@ -194,6 +240,7 @@ export function selectAccount(
 
     for (const account of config.accounts) {
       if (!account?.refreshToken) continue;
+      if (excludeTokens.includes(account.refreshToken)) continue;
       const resetTime = getRateLimitResetTime(account, model);
       if (resetTime < earliestReset) {
         earliestReset = resetTime;
@@ -290,4 +337,31 @@ export function formatDuration(ms: number): string {
     return `${minutes}m ${seconds % 60}s`;
   }
   return `${seconds}s`;
+}
+
+export async function updateAccountQuota(
+  config: AccountsConfig,
+  account: Account,
+  remainingFraction: number,
+  resetTime?: string
+): Promise<void> {
+  const accountIndex = config.accounts.findIndex(
+    (a) => a.refreshToken === account.refreshToken
+  );
+
+  if (accountIndex === -1) return;
+
+  const targetAccount = config.accounts[accountIndex];
+  if (!targetAccount) return;
+
+  const quotaUpdate = {
+    remainingFraction,
+    resetTime,
+    updatedAt: Date.now(),
+  };
+
+  targetAccount.cachedImageQuota = quotaUpdate;
+  account.cachedImageQuota = quotaUpdate;
+
+  await saveAccounts(config);
 }

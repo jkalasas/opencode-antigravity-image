@@ -7,7 +7,12 @@ import {
   GOOGLE_TOKEN_URL,
   ANTIGRAVITY_ENDPOINT,
   DEFAULT_ASPECT_RATIO,
+  DEFAULT_IMAGE_SIZE,
+  QUOTA_API_URL,
+  QUOTA_USER_AGENT,
+  DEFAULT_MODEL,
   type AspectRatio,
+  type ImageSize,
   type SupportedModel,
 } from "./constants";
 import type {
@@ -19,9 +24,12 @@ import type {
   GenerateContentRequest,
   GenerateContentResponse,
   CandidatePart,
+  CachedImageQuota,
+  QuotaApiResponse,
 } from "./types";
+import { fetchWithProxy } from "./proxy";
 
-export async function refreshAccessToken(refreshToken: string): Promise<string> {
+export async function refreshAccessToken(refreshToken: string, proxyUrl?: string): Promise<string> {
   const params = new URLSearchParams({
     client_id: ANTIGRAVITY_CLIENT_ID,
     client_secret: ANTIGRAVITY_CLIENT_SECRET,
@@ -29,11 +37,11 @@ export async function refreshAccessToken(refreshToken: string): Promise<string> 
     grant_type: "refresh_token",
   });
 
-  const response = await fetch(GOOGLE_TOKEN_URL, {
+  const response = await fetchWithProxy(GOOGLE_TOKEN_URL, {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: params.toString(),
-  });
+  }, proxyUrl);
 
   if (!response.ok) {
     const text = await response.text();
@@ -107,7 +115,9 @@ export function buildContents(
 
 export interface GenerateImageOptions {
   aspectRatio?: AspectRatio;
+  imageSize?: ImageSize;
   count?: number;
+  proxyUrl?: string;
 }
 
 export async function generateImages(
@@ -116,9 +126,8 @@ export async function generateImages(
   contents: Content[],
   options: GenerateImageOptions = {}
 ): Promise<GenerateContentResponse> {
-  const { aspectRatio = DEFAULT_ASPECT_RATIO, count = 1 } = options;
+  const { aspectRatio = DEFAULT_ASPECT_RATIO, imageSize = DEFAULT_IMAGE_SIZE, count = 1, proxyUrl } = options;
 
-  // Antigravity uses /v1internal:generateContent (no model in URL)
   const url = `${ANTIGRAVITY_ENDPOINT}/v1internal:generateContent`;
 
   const innerRequest: GenerateContentRequest = {
@@ -127,6 +136,7 @@ export async function generateImages(
       responseModalities: ["IMAGE"],
       imageConfig: {
         aspectRatio,
+        imageSize,
       },
       candidateCount: count,
     },
@@ -152,7 +162,7 @@ export async function generateImages(
     requestId: `agent-${crypto.randomUUID()}`,
   };
 
-  const response = await fetch(url, {
+  const response = await fetchWithProxy(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -162,7 +172,7 @@ export async function generateImages(
       "Client-Metadata": '{"ideType":"IDE_UNSPECIFIED","platform":"PLATFORM_UNSPECIFIED","pluginType":"GEMINI"}',
     },
     body: JSON.stringify(wrappedBody),
-  });
+  }, proxyUrl);
 
   if (response.status === 429) {
     const retryAfter = response.headers.get("Retry-After");
@@ -171,6 +181,44 @@ export async function generateImages(
     (error as RateLimitError).isRateLimit = true;
     (error as RateLimitError).retryAfterMs = retryMs;
     throw error;
+  }
+
+  if (response.status === 503) {
+    const text = await response.text();
+    let retryMs = 60 * 1000;
+    let isCapacityExhausted = false;
+    
+    try {
+      const errorData = JSON.parse(text);
+      const errorInfo = errorData?.error?.details?.find(
+        (d: { "@type"?: string; reason?: string }) => 
+          d["@type"]?.includes("ErrorInfo") && d.reason === "MODEL_CAPACITY_EXHAUSTED"
+      );
+      isCapacityExhausted = !!errorInfo;
+      
+      if (isCapacityExhausted) {
+        const retryInfo = errorData?.error?.details?.find(
+          (d: { "@type"?: string }) => d["@type"]?.includes("RetryInfo")
+        );
+        if (retryInfo?.retryDelay) {
+          const match = retryInfo.retryDelay.match(/^(\d+(?:\.\d+)?)s$/);
+          if (match) {
+            retryMs = Math.ceil(parseFloat(match[1]) * 1000);
+          }
+        }
+      }
+    } catch {
+      // Parse failed, treat as generic 503
+    }
+    
+    if (isCapacityExhausted) {
+      const error = new Error(`Model capacity exhausted. Retry after ${Math.ceil(retryMs / 1000)} seconds.`);
+      (error as CapacityError).isCapacityError = true;
+      (error as CapacityError).retryAfterMs = retryMs;
+      throw error;
+    }
+    
+    throw new Error(`API request failed (503): ${text}`);
   }
 
   if (!response.ok) {
@@ -197,6 +245,19 @@ export function isRateLimitError(error: unknown): error is RateLimitError {
     error instanceof Error &&
     "isRateLimit" in error &&
     (error as RateLimitError).isRateLimit === true
+  );
+}
+
+export interface CapacityError extends Error {
+  isCapacityError: boolean;
+  retryAfterMs: number;
+}
+
+export function isCapacityError(error: unknown): error is CapacityError {
+  return (
+    error instanceof Error &&
+    "isCapacityError" in error &&
+    (error as CapacityError).isCapacityError === true
   );
 }
 
@@ -266,4 +327,43 @@ export function buildModelResponseContent(response: GenerateContentResponse): Co
     role: "model",
     parts,
   };
+}
+
+export async function fetchImageModelQuota(
+  accessToken: string
+): Promise<CachedImageQuota | null> {
+  try {
+    const response = await fetch(QUOTA_API_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+        "User-Agent": QUOTA_USER_AGENT,
+      },
+      body: JSON.stringify({}),
+    });
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const data = (await response.json()) as QuotaApiResponse;
+    const imageModel = data.models?.[DEFAULT_MODEL];
+
+    if (!imageModel?.quotaInfo) {
+      return null;
+    }
+
+    if (imageModel.quotaInfo.remainingFraction === undefined || imageModel.quotaInfo.remainingFraction === null) {
+      return null;
+    }
+
+    return {
+      remainingFraction: imageModel.quotaInfo.remainingFraction,
+      resetTime: imageModel.quotaInfo.resetTime,
+      updatedAt: Date.now(),
+    };
+  } catch {
+    return null;
+  }
 }

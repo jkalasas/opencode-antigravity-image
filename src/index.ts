@@ -5,12 +5,15 @@ import {
   COMMAND_FILE,
   COMMAND_CONTENT,
   VALID_ASPECT_RATIOS,
+  VALID_IMAGE_SIZES,
   DEFAULT_MODEL,
   DEFAULT_ASPECT_RATIO,
+  DEFAULT_IMAGE_SIZE,
   CONFIG_PATHS,
   IMAGE_CONFIG_PATHS,
+  QUOTA_CACHE_TTL_MS,
 } from "./constants";
-import type { AspectRatio, SupportedModel } from "./constants";
+import type { AspectRatio, ImageSize, SupportedModel } from "./constants";
 import type { GenerateImageInput, Content, InlineDataPart, TextPart } from "./types";
 import {
   loadAccounts,
@@ -21,6 +24,7 @@ import {
   markAccountUsed,
   getNextAvailableResetTime,
   formatDuration,
+  updateAccountQuota,
 } from "./accounts";
 import {
   refreshAccessToken,
@@ -29,7 +33,9 @@ import {
   generateImages,
   extractImages,
   isRateLimitError,
+  isCapacityError,
   buildModelResponseContent,
+  fetchImageModelQuota,
 } from "./api";
 import {
   loadSession,
@@ -81,6 +87,10 @@ Uses credentials from opencode-antigravity-auth.`,
             .enum(VALID_ASPECT_RATIOS as unknown as [string, ...string[]])
             .optional()
             .describe(`Aspect ratio: ${VALID_ASPECT_RATIOS.join(", ")}. Default: 1:1`),
+          image_size: z
+            .enum(VALID_IMAGE_SIZES as unknown as [string, ...string[]])
+            .optional()
+            .describe(`Image resolution: ${VALID_IMAGE_SIZES.join(", ")}. Default: 1K`),
           output_path: z
             .string()
             .optional()
@@ -108,6 +118,7 @@ Uses credentials from opencode-antigravity-auth.`,
           const {
             prompt,
             aspect_ratio: aspectRatio = DEFAULT_ASPECT_RATIO,
+            image_size: imageSize = DEFAULT_IMAGE_SIZE,
             output_path: outputPath,
             input_image: inputImage,
             count = 1,
@@ -164,7 +175,7 @@ Try again later or add more accounts to opencode-antigravity-auth.`;
 
             let accessToken: string;
             try {
-              accessToken = await refreshAccessToken(account.refreshToken);
+              accessToken = await refreshAccessToken(account.refreshToken, account.proxyUrl);
             } catch (error) {
               const message = error instanceof Error ? error.message : String(error);
               return `❌ **Token refresh failed**
@@ -195,24 +206,31 @@ ${message}`;
             const contents = buildContents(prompt, inputImagePart, sessionHistory);
 
             let response;
+            let effectiveAccount = account;
+            let effectiveToken = accessToken;
             try {
               response = await generateImages(accessToken, model as SupportedModel, contents, {
                 aspectRatio: aspectRatio as AspectRatio,
+                imageSize: imageSize as ImageSize,
                 count,
+                proxyUrl: account.proxyUrl,
               });
             } catch (error) {
               if (isRateLimitError(error)) {
                 await markRateLimited(config, account, model, error.retryAfterMs);
 
-                const nextAccount = selectAccount(selectionConfig, model);
-                if (nextAccount && nextAccount.refreshToken !== account.refreshToken) {
+                const nextAccount = selectAccount(selectionConfig, model, [account.refreshToken]);
+                if (nextAccount) {
                   try {
-                    const newToken = await refreshAccessToken(nextAccount.refreshToken);
+                    const newToken = await refreshAccessToken(nextAccount.refreshToken, nextAccount.proxyUrl);
                     response = await generateImages(newToken, model as SupportedModel, contents, {
                       aspectRatio: aspectRatio as AspectRatio,
+                      imageSize: imageSize as ImageSize,
                       count,
+                      proxyUrl: nextAccount.proxyUrl,
                     });
-                    await markAccountUsed(config, nextAccount);
+                    effectiveAccount = nextAccount;
+                    effectiveToken = newToken;
                   } catch (retryError) {
                     const message = retryError instanceof Error ? retryError.message : String(retryError);
                     return `❌ **Rate limit hit, retry failed**
@@ -229,6 +247,37 @@ Retry after: ${wait}
 
 All accounts are currently rate-limited.`;
                 }
+              } else if (isCapacityError(error)) {
+                const nextAccount = selectAccount(selectionConfig, model, [account.refreshToken]);
+                if (nextAccount) {
+                  try {
+                    const newToken = await refreshAccessToken(nextAccount.refreshToken);
+                    response = await generateImages(newToken, model as SupportedModel, contents, {
+                      aspectRatio: aspectRatio as AspectRatio,
+                      count,
+                    });
+                    effectiveAccount = nextAccount;
+                    effectiveToken = newToken;
+                  } catch (retryError) {
+                    if (isCapacityError(retryError)) {
+                      const wait = formatDuration(retryError.retryAfterMs);
+                      return `❌ **Model capacity exhausted**
+
+All accounts hitting capacity limits. Retry after: ${wait}`;
+                    }
+                    const message = retryError instanceof Error ? retryError.message : String(retryError);
+                    return `❌ **Capacity error, retry failed**
+
+${message}`;
+                  }
+                } else {
+                  const wait = formatDuration(error.retryAfterMs);
+                  return `❌ **Model capacity exhausted**
+
+Retry after: ${wait}
+
+Try again shortly - this is a temporary server-side issue.`;
+                }
               } else {
                 const message = error instanceof Error ? error.message : String(error);
                 return `❌ **Image generation failed**
@@ -241,7 +290,21 @@ ${message}`;
               return "❌ **No response received from API**";
             }
 
-            await markAccountUsed(config, account);
+            await markAccountUsed(config, effectiveAccount);
+
+            const cachedQuota = effectiveAccount.cachedImageQuota;
+            const quotaIsStale = !cachedQuota || (Date.now() - cachedQuota.updatedAt > QUOTA_CACHE_TTL_MS);
+            if (quotaIsStale) {
+              const quota = await fetchImageModelQuota(effectiveToken);
+              if (quota) {
+                await updateAccountQuota(
+                  config,
+                  effectiveAccount,
+                  quota.remainingFraction,
+                  quota.resetTime
+                );
+              }
+            }
 
             let images;
             try {
@@ -278,10 +341,10 @@ ${message}`;
               output += `\n\n**Session:** \`${sessionId}\` (use same ID for consistent characters)`;
             }
 
-            output += `\n\n**Model:** ${model} | **Aspect Ratio:** ${aspectRatio}`;
+            output += `\n\n**Model:** ${model} | **Aspect Ratio:** ${aspectRatio} | **Size:** ${imageSize}`;
 
-            if (account.email) {
-              output += ` | **Account:** ${account.email.split("@")[0]}...`;
+            if (effectiveAccount.email) {
+              output += ` | **Account:** ${effectiveAccount.email.split("@")[0]}...`;
             }
 
             return output;

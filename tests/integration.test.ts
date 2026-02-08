@@ -14,7 +14,7 @@ describe("Image Generation Integration", () => {
     } catch {}
   });
 
-  test("should generate an image when valid token is provided via env", async () => {
+  test("should generate an image with default settings", async () => {
     if (!TEST_TOKEN) {
       console.warn("Skipping integration test: ANTIGRAVITY_REFRESH_TOKEN not set");
       return; 
@@ -22,7 +22,6 @@ describe("Image Generation Integration", () => {
 
     console.log("Starting integration test with provided token...");
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const ctx: any = { worktree: process.cwd() };
     const p = await plugin(ctx);
     
@@ -31,8 +30,6 @@ describe("Image Generation Integration", () => {
     }
 
     const generateImage = p.tool.generate_image;
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const context: any = {};
 
     const result = await generateImage.execute({
@@ -45,11 +42,50 @@ describe("Image Generation Integration", () => {
     expect(result).not.toContain("❌");
     expect(result).not.toContain("Error");
     expect(result).toContain("Model:");
+    expect(result).toContain("**Size:** 1K");
     
     const files = await fs.readdir(TEST_OUTPUT_DIR);
     const imageFiles = files.filter(f => f.endsWith(".jpg") || f.endsWith(".png"));
     expect(imageFiles.length).toBeGreaterThan(0);
     
     console.log(`Generated ${imageFiles.length} images successfully.`);
+  }, 120000);
+
+  test("should generate an image with custom image_size", async () => {
+    if (!TEST_TOKEN) {
+      console.warn("Skipping integration test: ANTIGRAVITY_REFRESH_TOKEN not set");
+      return; 
+    }
+
+    console.log("Starting image_size test...");
+
+    const ctx: any = { worktree: process.cwd() };
+    const p = await plugin(ctx);
+    
+    if (!p || !p.tool || !p.tool.generate_image) {
+        throw new Error("Plugin failed to initialize tool");
+    }
+
+    const generateImage = p.tool.generate_image;
+    const context: any = {};
+
+    const result = await generateImage.execute({
+      prompt: "A red circle on white background",
+      count: 1,
+      aspect_ratio: "1:1",
+      image_size: "2K",
+      output_path: TEST_OUTPUT_DIR,
+      file_name: "test-2k-image"
+    }, context);
+
+    expect(result).not.toContain("❌");
+    expect(result).not.toContain("Error");
+    expect(result).toContain("**Size:** 2K");
+    
+    const files = await fs.readdir(TEST_OUTPUT_DIR);
+    const testFile = files.find(f => f.includes("test-2k-image"));
+    expect(testFile).toBeDefined();
+    
+    console.log("2K image generated successfully.");
   }, 120000);
 });
