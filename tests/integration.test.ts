@@ -42,7 +42,7 @@ describe("Image Generation Integration", () => {
     expect(result).not.toContain("❌");
     expect(result).not.toContain("Error");
     expect(result).toContain("Model:");
-    expect(result).toContain("Size: 1K");
+    expect(result).toContain("**Size:** 1K");
     
     const files = await fs.readdir(TEST_OUTPUT_DIR);
     const imageFiles = files.filter(f => f.endsWith(".jpg") || f.endsWith(".png"));
@@ -80,7 +80,7 @@ describe("Image Generation Integration", () => {
 
     expect(result).not.toContain("❌");
     expect(result).not.toContain("Error");
-    expect(result).toContain("Size: 2K");
+    expect(result).toContain("**Size:** 2K");
     
     const files = await fs.readdir(TEST_OUTPUT_DIR);
     const testFile = files.find(f => f.includes("test-2k-image"));
