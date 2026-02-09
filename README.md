@@ -159,6 +159,29 @@ generate_image({
 })
 ```
 
+### Restrict Which Google Accounts Are Used (Optional)
+
+If you have multiple Google accounts configured in `antigravity-accounts.json`, you can restrict image generation to a subset.
+
+Option A: environment variable (comma-separated)
+
+```bash
+export OPENCODE_ANTIGRAVITY_IMAGE_ALLOWED_EMAILS="you@example.com,other@example.com"
+```
+
+Option B: config file (checked in this order)
+
+- `~/.config/opencode/antigravity-image.json`
+- `~/.local/share/opencode/antigravity-image.json`
+
+Example `antigravity-image.json`:
+
+```json
+{ "allowedEmails": ["you@example.com", "other@example.com"] }
+```
+
+Note: this matches on the `email` field in `antigravity-accounts.json`. If your accounts file has no emails, re-auth with `opencode auth login` so they get populated.
+
 ## Parameters
 
 | Parameter | Type | Default | Description |

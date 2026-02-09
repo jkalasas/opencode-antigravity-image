@@ -20,6 +20,11 @@ export const CONFIG_PATHS = Array.from(new Set([
   path.join(dataBase, "antigravity-accounts.json"),
 ]));
 
+export const IMAGE_CONFIG_PATHS = Array.from(new Set([
+  path.join(configBase, "antigravity-image.json"),
+  path.join(dataBase, "antigravity-image.json"),
+]));
+
 export const ANTIGRAVITY_CLIENT_ID = AUTH_CLIENT_ID;
 export const ANTIGRAVITY_CLIENT_SECRET = AUTH_CLIENT_SECRET;
 

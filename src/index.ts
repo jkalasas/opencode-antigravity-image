@@ -10,12 +10,15 @@ import {
   DEFAULT_ASPECT_RATIO,
   DEFAULT_IMAGE_SIZE,
   CONFIG_PATHS,
+  IMAGE_CONFIG_PATHS,
   QUOTA_CACHE_TTL_MS,
 } from "./constants";
 import type { AspectRatio, ImageSize, SupportedModel } from "./constants";
 import type { GenerateImageInput, Content, InlineDataPart, TextPart } from "./types";
 import {
   loadAccounts,
+  getAllowedImageAccountEmails,
+  filterAccountsByEmailAllowlist,
   selectAccount,
   markRateLimited,
   markAccountUsed,
@@ -139,9 +142,26 @@ Configuration file locations checked:
 ${CONFIG_PATHS.map((p) => `- ${p}`).join("\n")}`;
             }
 
-            const account = selectAccount(config, model);
+            const allowlist = await getAllowedImageAccountEmails();
+            const selectionConfig = allowlist
+              ? filterAccountsByEmailAllowlist(config, allowlist)
+              : config;
+
+            if (allowlist && selectionConfig.accounts.length === 0) {
+              return `❌ **No accounts match the image allowlist**
+
+Set \`OPENCODE_ANTIGRAVITY_IMAGE_ALLOWED_EMAILS\` (comma-separated), or create an allowlist file at one of:
+${IMAGE_CONFIG_PATHS.map((p) => `- ${p}`).join("\n")}
+
+Example config file:
+\`\`\`json
+{ "allowedEmails": ["you@example.com", "other@example.com"] }
+\`\`\``;
+            }
+
+            const account = selectAccount(selectionConfig, model);
             if (!account) {
-              const resetTime = getNextAvailableResetTime(config, model);
+              const resetTime = getNextAvailableResetTime(selectionConfig, model);
               if (resetTime) {
                 const wait = formatDuration(resetTime - Date.now());
                 return `❌ **All accounts are rate-limited**
@@ -199,7 +219,7 @@ ${message}`;
               if (isRateLimitError(error)) {
                 await markRateLimited(config, account, model, error.retryAfterMs);
 
-                const nextAccount = selectAccount(config, model, [account.refreshToken]);
+                const nextAccount = selectAccount(selectionConfig, model, [account.refreshToken]);
                 if (nextAccount) {
                   try {
                     const newToken = await refreshAccessToken(nextAccount.refreshToken, nextAccount.proxyUrl);
@@ -228,7 +248,7 @@ Retry after: ${wait}
 All accounts are currently rate-limited.`;
                 }
               } else if (isCapacityError(error)) {
-                const nextAccount = selectAccount(config, model, [account.refreshToken]);
+                const nextAccount = selectAccount(selectionConfig, model, [account.refreshToken]);
                 if (nextAccount) {
                   try {
                     const newToken = await refreshAccessToken(nextAccount.refreshToken);
