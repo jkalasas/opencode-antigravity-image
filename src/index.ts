@@ -14,7 +14,7 @@ import {
   QUOTA_CACHE_TTL_MS,
 } from "./constants";
 import type { AspectRatio, ImageSize, SupportedModel } from "./constants";
-import type { GenerateImageInput, Content, InlineDataPart, TextPart } from "./types";
+import type { GenerateImageInput, Content, InlineDataPart, TextPart, Account } from "./types";
 import {
   loadAccounts,
   getAllowedImageAccountEmails,
@@ -128,6 +128,7 @@ Uses credentials from opencode-antigravity-auth.`,
 
           const model = DEFAULT_MODEL;
           const projectRoot = worktree ?? process.cwd();
+          const getProjectId = (acct: Account) => acct.managedProjectId || acct.projectId;
 
           try {
             const config = await loadAccounts();
@@ -214,6 +215,7 @@ ${message}`;
                 imageSize: imageSize as ImageSize,
                 count,
                 proxyUrl: account.proxyUrl,
+                projectId: getProjectId(account),
               });
             } catch (error) {
               if (isRateLimitError(error)) {
@@ -228,6 +230,7 @@ ${message}`;
                       imageSize: imageSize as ImageSize,
                       count,
                       proxyUrl: nextAccount.proxyUrl,
+                      projectId: getProjectId(nextAccount),
                     });
                     effectiveAccount = nextAccount;
                     effectiveToken = newToken;
@@ -255,6 +258,7 @@ All accounts are currently rate-limited.`;
                     response = await generateImages(newToken, model as SupportedModel, contents, {
                       aspectRatio: aspectRatio as AspectRatio,
                       count,
+                      projectId: getProjectId(nextAccount),
                     });
                     effectiveAccount = nextAccount;
                     effectiveToken = newToken;

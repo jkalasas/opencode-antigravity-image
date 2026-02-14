@@ -8,6 +8,7 @@ import {
   ANTIGRAVITY_ENDPOINT,
   DEFAULT_ASPECT_RATIO,
   DEFAULT_IMAGE_SIZE,
+  DEFAULT_PROJECT_ID,
   QUOTA_API_URL,
   QUOTA_USER_AGENT,
   DEFAULT_MODEL,
@@ -118,6 +119,7 @@ export interface GenerateImageOptions {
   imageSize?: ImageSize;
   count?: number;
   proxyUrl?: string;
+  projectId?: string;
 }
 
 export async function generateImages(
@@ -126,7 +128,7 @@ export async function generateImages(
   contents: Content[],
   options: GenerateImageOptions = {}
 ): Promise<GenerateContentResponse> {
-  const { aspectRatio = DEFAULT_ASPECT_RATIO, imageSize = DEFAULT_IMAGE_SIZE, count = 1, proxyUrl } = options;
+  const { aspectRatio = DEFAULT_ASPECT_RATIO, imageSize = DEFAULT_IMAGE_SIZE, count = 1, proxyUrl, projectId = DEFAULT_PROJECT_ID } = options;
 
   const url = `${ANTIGRAVITY_ENDPOINT}/v1internal:generateContent`;
 
@@ -154,7 +156,7 @@ export async function generateImages(
 
   // Antigravity wrapped body format
   const wrappedBody = {
-    project: "rising-fact-p41fc",
+    project: projectId,
     model: model,
     request: innerRequest,
     requestType: "agent",
