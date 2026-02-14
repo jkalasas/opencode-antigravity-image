@@ -4,6 +4,7 @@ import {
   ANTIGRAVITY_CLIENT_ID as AUTH_CLIENT_ID,
   ANTIGRAVITY_CLIENT_SECRET as AUTH_CLIENT_SECRET,
   ANTIGRAVITY_ENDPOINT_DAILY,
+  ANTIGRAVITY_DEFAULT_PROJECT_ID,
 } from "opencode-antigravity-auth/dist/src/constants";
 
 const isWindows = os.platform() === "win32";
@@ -30,6 +31,7 @@ export const ANTIGRAVITY_CLIENT_SECRET = AUTH_CLIENT_SECRET;
 
 export const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 export const ANTIGRAVITY_ENDPOINT = ANTIGRAVITY_ENDPOINT_DAILY;
+export const DEFAULT_PROJECT_ID = ANTIGRAVITY_DEFAULT_PROJECT_ID;
 
 export const SUPPORTED_MODELS = [
   "gemini-3-pro-image",
