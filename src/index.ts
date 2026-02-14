@@ -65,7 +65,7 @@ try {
 }
 
 export const plugin: Plugin = async (ctx) => {
-  const worktree = ctx.worktree;
+  const worktree = (ctx.worktree && ctx.worktree !== "/") ? ctx.worktree : ctx.directory;
 
   return {
     tool: {

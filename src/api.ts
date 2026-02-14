@@ -154,7 +154,7 @@ export async function generateImages(
 
   // Antigravity wrapped body format
   const wrappedBody = {
-    project: "opencode-antigravity-image",
+    project: "rising-fact-p41fc",
     model: model,
     request: innerRequest,
     requestType: "agent",
