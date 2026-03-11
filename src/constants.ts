@@ -7,23 +7,18 @@ import {
   ANTIGRAVITY_DEFAULT_PROJECT_ID,
 } from "opencode-antigravity-auth/dist/src/constants";
 
-const isWindows = os.platform() === "win32";
-
-const configBase = isWindows
-  ? path.join(os.homedir(), "AppData", "Roaming", "opencode")
-  : path.join(os.homedir(), ".config", "opencode");
-
 const xdgData = process.env.XDG_DATA_HOME || path.join(os.homedir(), ".local", "share");
-const dataBase = isWindows ? configBase : path.join(xdgData, "opencode");
 
 export const CONFIG_PATHS = Array.from(new Set([
-  path.join(configBase, "antigravity-accounts.json"),
-  path.join(dataBase, "antigravity-accounts.json"),
+  path.join(os.homedir(), ".config", "opencode", "antigravity-accounts.json"),
+  path.join(os.homedir(), "AppData", "Roaming", "opencode", "antigravity-accounts.json"),
+  path.join(xdgData, "opencode", "antigravity-accounts.json"),
 ]));
 
 export const IMAGE_CONFIG_PATHS = Array.from(new Set([
-  path.join(configBase, "antigravity-image.json"),
-  path.join(dataBase, "antigravity-image.json"),
+  path.join(os.homedir(), ".config", "opencode", "antigravity-image.json"),
+  path.join(os.homedir(), "AppData", "Roaming", "opencode", "antigravity-image.json"),
+  path.join(xdgData, "opencode", "antigravity-image.json"),
 ]));
 
 export const ANTIGRAVITY_CLIENT_ID = AUTH_CLIENT_ID;
